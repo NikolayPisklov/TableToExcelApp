@@ -134,6 +134,10 @@ const headerTitle = (iso) => {
 <style scoped>
 .sheet {
   overflow-x: auto;
+  /* Hug the table instead of stretching: a fixed-layout table handed spare
+     width distributes it across every column, which would undo the 32px dates. */
+  width: fit-content;
+  max-width: 100%;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -145,7 +149,8 @@ table {
      browser widen them to fill the container. */
   table-layout: fixed;
   width: auto;
-  min-width: 100%;
+  /* Floor so a nearly empty sheet still reads as a table, not a sliver. */
+  min-width: 420px;
 }
 
 th,
