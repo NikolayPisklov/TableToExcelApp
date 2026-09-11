@@ -95,7 +95,8 @@ export async function importFromExcel(file) {
   let lastColumn = sheet.columnCount
 
   // Своя же выгрузка начинается с колонки «№»; у чужих файлов её может не быть.
-  const nameColumn = isNumberLabel(cellText(headerRow.getCell(1).value)) ? 2 : 1
+  const numberColumn = isNumberLabel(cellText(headerRow.getCell(1).value)) ? 1 : 0
+  const nameColumn = numberColumn ? 2 : 1
 
   // Drop our own trailing "Total" column so it does not import as a date.
   if (lastColumn > 1 && isTotalLabel(cellText(headerRow.getCell(lastColumn).value))) {
@@ -114,9 +115,12 @@ export async function importFromExcel(file) {
     const sheetRow = sheet.getRow(rowNumber)
     const name = cellText(sheetRow.getCell(nameColumn).value)
     const checks = columnIndexes.map((index) => isChecked(sheetRow.getCell(index).value))
+    // Номер удерживает строку без имени и без отметок: ФИО приложение не
+    // хранит, поэтому пустая строка человека опознаётся только по номеру.
+    const numbered = numberColumn > 0 && cellText(sheetRow.getCell(numberColumn).value) !== ''
 
-    // Skip rows that are entirely blank.
-    if (!name && !checks.some(Boolean)) continue
+    // Пропускаем строки, в которых нет вообще ничего.
+    if (!name && !numbered && !checks.some(Boolean)) continue
     rows.push({ name, checks })
   }
 

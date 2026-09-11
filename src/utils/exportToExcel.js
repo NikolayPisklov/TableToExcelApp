@@ -84,7 +84,7 @@ export async function buildWorkbook(state) {
   rows.forEach((row, index) => {
     const excelRow = sheet.getRow(firstDataRow + index)
     excelRow.getCell(numCol).value = index + 1
-    excelRow.getCell(nameCol).value = row.name
+    // Ячейка ФИО намеренно пустая — приложение имён не хранит.
     columns.forEach((column, columnIndex) => {
       const cell = excelRow.getCell(firstDateCol + columnIndex)
       if (row.checks[column.id]) cell.value = MARK

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import { useSheet } from '../composables/useSheet.js'
 import { formatDate, isWeekend, weekdayLong, weekdayShort } from '../utils/date.js'
 
@@ -40,8 +40,6 @@ async function addAndEdit() {
   const column = addColumn()
   await startEdit(column.id)
 }
-
-const isEmpty = computed(() => !state.rows.length && !state.columns.length)
 
 const headerTitle = (iso) => {
   const formatted = formatDate(iso)
@@ -97,7 +95,7 @@ const headerTitle = (iso) => {
           <td class="col-num">{{ index + 1 }}</td>
           <th class="col-name">
             <div class="name-cell">
-              <input v-model="row.name" type="text" placeholder="Фамилия и имя" />
+              <span class="name-blank"></span>
               <button
                 class="mark"
                 :class="{ active: isRowFull(row) }"
@@ -125,7 +123,11 @@ const headerTitle = (iso) => {
 
         <tr v-if="!state.rows.length">
           <td class="empty" :colspan="state.columns.length + 3">
-            Пока никого нет — добавьте строку, чтобы начать.
+            {{
+              state.columns.length
+                ? 'Даты есть — добавьте строки кнопкой «+ Человек».'
+                : 'Таблица пуста. Нажмите «Заполнить месяц» и добавьте строки.'
+            }}
           </td>
         </tr>
       </tbody>
@@ -149,7 +151,6 @@ const headerTitle = (iso) => {
       </tfoot>
     </table>
 
-    <p v-if="isEmpty" class="hint">Добавьте человека и дату, чтобы построить таблицу.</p>
   </div>
 </template>
 
@@ -279,22 +280,11 @@ tfoot .col-name {
   gap: 4px;
 }
 
-.name-cell input {
+/* ФИО не заполняются в приложении: ячейка остаётся пустой и в таблице,
+   и в выгрузке — под запись от руки или правку в Excel. */
+.name-blank {
   flex: 1;
   min-width: 0;
-  font: inherit;
-  padding: 3px 6px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: inherit;
-}
-
-.name-cell input:hover,
-.name-cell input:focus {
-  border-color: var(--border);
-  background: var(--surface);
-  outline: none;
 }
 
 .check {
@@ -422,11 +412,5 @@ tfoot .total.weekend {
 .remove:hover {
   background: #fee2e2;
   color: #b91c1c;
-}
-
-.hint {
-  color: var(--muted);
-  padding: 0 12px 12px;
-  margin: 0;
 }
 </style>

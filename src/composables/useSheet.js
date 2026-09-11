@@ -1,17 +1,17 @@
-import { computed, reactive, watch } from 'vue'
+import { computed, reactive } from 'vue'
 import { monthWorkdays, toISODate } from '../utils/date.js'
-
-const STORAGE_KEY = 'attendance-sheet'
-const STORAGE_VERSION = 1
 
 let nextId = 1
 const uid = () => `id-${nextId++}`
 
 /**
- * Shared sheet state.
+ * Общее состояние таблицы. Живёт только в памяти и стартует пустым: при
+ * перезагрузке страницы всё начинается заново, единственный способ сохранить
+ * данные — выгрузка в Excel.
  *
- * rows[].checks is keyed by column id, so adding or removing a date column
- * never has to touch the order of anything else.
+ * ФИО не хранятся — колонка есть, но ячейки всегда пустые, строки различаются
+ * по номеру. checks у каждой строки — по id колонки, поэтому добавление и
+ * удаление дат не задевает порядок остального.
  */
 const state = reactive({
   columns: [],
@@ -36,8 +36,8 @@ function removeColumn(columnId) {
   }
 }
 
-function addRow(name = '') {
-  const row = { id: uid(), name, checks: {} }
+function addRow() {
+  const row = { id: uid(), checks: {} }
   for (const column of state.columns) {
     row.checks[column.id] = false
   }
@@ -50,7 +50,7 @@ function removeRow(rowId) {
   if (index !== -1) state.rows.splice(index, 1)
 }
 
-/** Day after the last column, or today when the sheet has no dates yet. */
+/** Следующий день после последней колонки, либо сегодня, если дат ещё нет. */
 function suggestNextDate() {
   const last = state.columns[state.columns.length - 1]
   const date = last ? new Date(`${last.date}T00:00:00`) : new Date()
@@ -89,8 +89,9 @@ function fillMonth(reference = new Date()) {
 }
 
 /**
- * Swaps in a whole sheet, e.g. from an imported file.
- * Incoming `checks` are positional (one per column), so fresh ids are minted here.
+ * Подставляет таблицу целиком, например из импортированного файла.
+ * Во входных данных checks позиционные (по одному на колонку), поэтому id
+ * выдаются заново. ФИО из файла игнорируются — их негде хранить.
  */
 function replaceAll({ columns, rows }) {
   state.columns = columns.map((column) => ({ id: uid(), date: column.date ?? '' }))
@@ -99,12 +100,12 @@ function replaceAll({ columns, rows }) {
     state.columns.forEach((column, index) => {
       checks[column.id] = Boolean(row.checks?.[index])
     })
-    return { id: uid(), name: row.name ?? '', checks }
+    return { id: uid(), checks }
   })
 }
 
 /**
- * Сбрасывает даты, оставляя людей.
+ * Сбрасывает даты, оставляя строки.
  *
  * Отметки хранятся по id колонок, поэтому checks нужно очищать явно —
  * иначе в строках остались бы ключи на уже несуществующие даты.
@@ -159,96 +160,6 @@ const columnTotals = computed(() => {
 const grandTotal = computed(() =>
   state.rows.reduce((sum, row) => sum + rowTotal(row), 0),
 )
-
-/* ---------------------------------------------------------------- storage */
-
-function save() {
-  try {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        version: STORAGE_VERSION,
-        nextId,
-        columns: state.columns,
-        rows: state.rows,
-      }),
-    )
-  } catch (cause) {
-    // Private mode or a full quota: the sheet still works, it just won't persist.
-    console.warn('Could not save the sheet.', cause)
-  }
-}
-
-/** Returns true when saved state was restored. Bad data is discarded, not thrown. */
-function load() {
-  let saved
-  try {
-    saved = localStorage.getItem(STORAGE_KEY)
-  } catch (cause) {
-    console.warn('Could not read saved sheet.', cause)
-    return false
-  }
-  if (!saved) return false
-
-  try {
-    const parsed = JSON.parse(saved)
-    if (!parsed || parsed.version !== STORAGE_VERSION) return false
-    if (!Array.isArray(parsed.columns) || !Array.isArray(parsed.rows)) return false
-
-    const columns = parsed.columns
-      .filter((column) => column && typeof column.id === 'string')
-      .map((column) => ({ id: column.id, date: typeof column.date === 'string' ? column.date : '' }))
-
-    const columnIds = new Set(columns.map((column) => column.id))
-
-    const rows = parsed.rows
-      .filter((row) => row && typeof row.id === 'string')
-      .map((row) => {
-        const checks = {}
-        for (const column of columns) {
-          checks[column.id] = Boolean(row.checks?.[column.id])
-        }
-        return { id: row.id, name: typeof row.name === 'string' ? row.name : '', checks }
-      })
-
-    state.columns = columns
-    state.rows = rows
-
-    // Keep minting unique ids even if the counter was lost or tampered with.
-    const usedIds = [...columnIds, ...rows.map((row) => row.id)]
-    const highest = usedIds.reduce((max, id) => {
-      const match = /^id-(\d+)$/.exec(id)
-      return match ? Math.max(max, Number(match[1])) : max
-    }, 0)
-    nextId = Math.max(Number(parsed.nextId) || 1, highest + 1)
-
-    return true
-  } catch (cause) {
-    console.warn('Saved sheet was unreadable and has been ignored.', cause)
-    return false
-  }
-}
-
-function seed() {
-  const today = new Date()
-  for (let offset = 0; offset < 3; offset++) {
-    const date = new Date(today)
-    date.setDate(today.getDate() + offset)
-    addColumn(toISODate(date))
-  }
-  for (const name of ['Иванов Иван', 'Петрова Анна', 'Сидоров Пётр']) {
-    addRow(name)
-  }
-}
-
-// Seed runs before the watcher below exists, so persist it explicitly.
-if (!load()) {
-  seed()
-  save()
-}
-
-// Deep watch: cell ticks and inline name/date edits all mutate nested values.
-watch(state, save, { deep: true, flush: 'post' })
 
 export function useSheet() {
   return {

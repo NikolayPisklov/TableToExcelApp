@@ -61,11 +61,12 @@ async function handleImport(event) {
   try {
     const sheet = await importFromExcel(file)
     replaceAll(sheet)
-    const people = sheet.rows.length
+    const lines = sheet.rows.length
     const dates = sheet.columns.length
     notice.value =
-      `Импортировано: ${people} ${plural(people, 'человек', 'человека', 'человек')} ` +
-      `и ${dates} ${plural(dates, 'дата', 'даты', 'дат')} из файла «${file.name}».`
+      `Импортировано: ${lines} ${plural(lines, 'строка', 'строки', 'строк')} ` +
+      `и ${dates} ${plural(dates, 'дата', 'даты', 'дат')} из файла «${file.name}». ` +
+      'ФИО не переносятся.'
   } catch (cause) {
     error.value = cause?.message || 'Не удалось прочитать файл. Это точно .xlsx?'
     console.error(cause)
@@ -96,7 +97,7 @@ function handleClear() {
   <main>
     <header>
       <div>
-        <h1>Табель</h1>
+        <h1>Конструктор табеля</h1>
         <p>Добавляйте людей и даты, отмечайте ячейки — итоги считаются как по строкам, так и по датам.</p>
       </div>
 
@@ -146,7 +147,10 @@ function handleClear() {
 
     <SheetTable />
 
-    <p class="footnote">Изменения автоматически сохраняются в этом браузере.</p>
+    <p class="footnote">
+      Таблица не сохраняется: после перезагрузки страницы она будет пустой.
+      Чтобы не потерять данные, выгрузите их в Excel.
+    </p>
   </main>
 </template>
 
