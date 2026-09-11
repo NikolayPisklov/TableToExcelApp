@@ -103,6 +103,23 @@ function replaceAll({ columns, rows }) {
   })
 }
 
+/**
+ * Сбрасывает даты, оставляя людей.
+ *
+ * Отметки хранятся по id колонок, поэтому checks нужно очищать явно —
+ * иначе в строках остались бы ключи на уже несуществующие даты.
+ *
+ * @returns {number} сколько колонок удалено
+ */
+function clearDates() {
+  const removed = state.columns.length
+  state.columns = []
+  for (const row of state.rows) {
+    row.checks = {}
+  }
+  return removed
+}
+
 function clearAll() {
   state.columns = []
   state.rows = []
@@ -242,6 +259,7 @@ export function useSheet() {
     removeRow,
     replaceAll,
     clearAll,
+    clearDates,
     fillMonth,
     toggleRow,
     isRowFull,

@@ -6,7 +6,7 @@ import { exportToExcel } from './utils/exportToExcel.js'
 import { importFromExcel } from './utils/importFromExcel.js'
 import { monthLabel, plural } from './utils/date.js'
 
-const { state, replaceAll, clearAll, fillMonth } = useSheet()
+const { state, replaceAll, clearAll, clearDates, fillMonth } = useSheet()
 
 const fileInput = ref(null)
 const busy = ref('')
@@ -74,8 +74,17 @@ async function handleImport(event) {
   }
 }
 
+function handleClearDates() {
+  const count = state.columns.length
+  if (!confirm(`Удалить все даты (${count}) вместе с отметками? ФИО останутся.`)) return
+  clearDates()
+  error.value = ''
+  notice.value =
+    `Удалено ${count} ${plural(count, 'дата', 'даты', 'дат')} вместе с отметками. ФИО остались.`
+}
+
 function handleClear() {
-  if (confirm('Очистить всю таблицу?')) {
+  if (confirm('Очистить всю таблицу — и даты, и список людей?')) {
     clearAll()
     error.value = ''
     notice.value = ''
@@ -87,8 +96,8 @@ function handleClear() {
   <main>
     <header>
       <div>
-        <h1>Табель посещаемости</h1>
-        <p>Добавляйте людей и даты, отмечайте ячейки — итоги считаются по строкам, по датам и всего.</p>
+        <h1>Табель</h1>
+        <p>Добавляйте людей и даты, отмечайте ячейки — итоги считаются как по строкам, так и по датам.</p>
       </div>
 
       <div class="actions">
@@ -110,8 +119,16 @@ function handleClear() {
         <button class="ghost" :disabled="!!busy" @click="pickFile">
           {{ busy === 'import' ? 'Импорт…' : 'Импорт из Excel' }}
         </button>
+        <button
+          class="ghost"
+          :disabled="!!busy || !state.columns.length"
+          title="Удалить все столбцы с датами, оставив список людей"
+          @click="handleClearDates"
+        >
+          Очистить даты
+        </button>
         <button class="ghost danger" :disabled="!!busy || !hasData" @click="handleClear">
-          Очистить
+          Очистить всё
         </button>
         <button
           class="primary"
