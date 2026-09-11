@@ -66,3 +66,28 @@ export function plural(count, one, few, many) {
   if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few
   return many
 }
+
+const MONTHS_NOMINATIVE = [
+  'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+  'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
+]
+
+/** `Сентябрь 2026` */
+export const monthLabel = (date = new Date()) =>
+  `${MONTHS_NOMINATIVE[date.getMonth()]} ${date.getFullYear()}`
+
+
+/**
+ * Все будние дни месяца в порядке возрастания, в формате ISO.
+ * Суббота и воскресенье пропускаются.
+ */
+export function monthWorkdays(reference = new Date()) {
+  const month = reference.getMonth()
+  const cursor = new Date(reference.getFullYear(), month, 1)
+  const dates = []
+  while (cursor.getMonth() === month) {
+    if (!isWeekend(toISODate(cursor))) dates.push(toISODate(cursor))
+    cursor.setDate(cursor.getDate() + 1)
+  }
+  return dates
+}

@@ -3,8 +3,18 @@ import { computed, nextTick, ref } from 'vue'
 import { useSheet } from '../composables/useSheet.js'
 import { formatDate, isWeekend, weekdayLong, weekdayShort } from '../utils/date.js'
 
-const { state, addColumn, removeColumn, addRow, removeRow, rowTotal, columnTotals, grandTotal } =
-  useSheet()
+const {
+  state,
+  addColumn,
+  removeColumn,
+  addRow,
+  removeRow,
+  toggleRow,
+  isRowFull,
+  rowTotal,
+  columnTotals,
+  grandTotal,
+} = useSheet()
 
 // A native date input cannot shrink to the ~32px a 30-column sheet needs, so the
 // header shows rotated text and swaps in a real picker only while editing.
@@ -45,6 +55,7 @@ const headerTitle = (iso) => {
     <table>
       <thead>
         <tr>
+          <th class="col-num">№</th>
           <th class="col-name">ФИО</th>
           <th
             v-for="column in state.columns"
@@ -82,10 +93,20 @@ const headerTitle = (iso) => {
       </thead>
 
       <tbody>
-        <tr v-for="row in state.rows" :key="row.id">
+        <tr v-for="(row, index) in state.rows" :key="row.id">
+          <td class="col-num">{{ index + 1 }}</td>
           <th class="col-name">
             <div class="name-cell">
               <input v-model="row.name" type="text" placeholder="Фамилия и имя" />
+              <button
+                class="mark"
+                :class="{ active: isRowFull(row) }"
+                :disabled="!state.columns.length"
+                :title="isRowFull(row) ? 'Снять все отметки в строке' : 'Отметить всё в строке'"
+                @click="toggleRow(row.id)"
+              >
+                ✓
+              </button>
               <button class="remove" title="Удалить человека" @click="removeRow(row.id)">×</button>
             </div>
           </th>
@@ -103,7 +124,7 @@ const headerTitle = (iso) => {
         </tr>
 
         <tr v-if="!state.rows.length">
-          <td class="empty" :colspan="state.columns.length + 2">
+          <td class="empty" :colspan="state.columns.length + 3">
             Пока никого нет — добавьте строку, чтобы начать.
           </td>
         </tr>
@@ -111,6 +132,7 @@ const headerTitle = (iso) => {
 
       <tfoot>
         <tr>
+          <td class="col-num"></td>
           <th class="col-name">
             <button class="add" title="Добавить человека" @click="addRow()">+ Человек</button>
           </th>
@@ -168,16 +190,30 @@ tfoot td {
   background: var(--total-bg);
 }
 
+/* Обе левые колонки залипают при горизонтальной прокрутке: № у края,
+   ФИО сразу за ней. */
+.col-num {
+  width: 34px;
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--surface);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .col-name {
   width: 190px;
   text-align: left;
   position: sticky;
-  left: 0;
+  left: 34px;
   z-index: 2;
   background: var(--surface);
   padding: 3px 6px;
 }
 
+thead .col-num,
+tfoot .col-num,
 thead .col-name,
 tfoot .col-name {
   background: var(--total-bg);
@@ -340,12 +376,47 @@ tfoot .total.weekend {
 }
 
 .col-date:hover .remove,
-.col-name:hover .remove {
+.col-name:hover .remove,
+.col-name:hover .mark {
   opacity: 1;
 }
 
-.name-cell .remove {
+/* Кнопки в строке появляются при наведении, чтобы не отнимать ширину у имени.
+   Полностью отмеченная строка — исключение: её галочка видна всегда. */
+.name-cell .remove,
+.name-cell .mark {
   opacity: 0;
+}
+
+.mark {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: 4px;
+}
+
+.mark:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.mark.active {
+  opacity: 1;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.mark:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.col-name:hover .mark:disabled {
+  opacity: 0.35;
 }
 
 .remove:hover {

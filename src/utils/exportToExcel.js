@@ -1,18 +1,17 @@
-const HEADER_FILL = 'FFEEF2FF'
-const TOTAL_FILL = 'FFEEF2FF'
-const GRAND_FILL = 'FFDBEAFE'
-const BORDER = 'FFDFE3E8'
+/**
+ * Выгрузка в .xlsx.
+ *
+ * Оформление сведено к минимуму: ни заливок, ни рамок, ни жирного шрифта.
+ * Заданы только то, что нужно для вида табеля — шрифт Times New Roman,
+ * вертикальные даты в шапке и ширины колонок под них.
+ */
 
-const thinBorder = {
-  top: { style: 'thin', color: { argb: BORDER } },
-  left: { style: 'thin', color: { argb: BORDER } },
-  bottom: { style: 'thin', color: { argb: BORDER } },
-  right: { style: 'thin', color: { argb: BORDER } },
-}
+/** Отметка в ячейке. Итоги считаются через COUNTIF по этой букве. */
+const MARK = 'Н'
 
-const fill = (argb) => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } })
+const FONT = { name: 'Times New Roman', size: 11 }
 
-/** 1-based column index -> spreadsheet letter (1 -> A, 27 -> AA). */
+/** Номер колонки (с единицы) -> буква: 1 -> A, 27 -> AA. */
 function columnLetter(index) {
   let letter = ''
   let n = index
@@ -25,11 +24,13 @@ function columnLetter(index) {
 }
 
 /**
- * Builds the workbook for the current sheet.
+ * Собирает книгу по текущей таблице.
  *
- * Totals are written as live SUM formulas rather than baked-in numbers, so the
- * file keeps working when someone edits it in Excel. ExcelJS is imported
- * lazily - it is ~950 kB and nothing needs it until the first export.
+ * Итоги записываются живыми формулами, а не готовыми числами, поэтому файл
+ * продолжает считать после правок в Excel. Раз в ячейках буква, а не единица,
+ * считать приходится через COUNTIF — SUM по тексту дал бы нули.
+ *
+ * ExcelJS подключается лениво: он весит ~950 кБ и до первой выгрузки не нужен.
  */
 export async function buildWorkbook(state) {
   const { default: ExcelJS } = await import('exceljs')
@@ -39,30 +40,33 @@ export async function buildWorkbook(state) {
   workbook.creator = 'Табель посещаемости'
   workbook.created = new Date()
 
-  const sheet = workbook.addWorksheet('Посещаемость', {
-    views: [{ state: 'frozen', xSplit: 1, ySplit: 1 }],
-  })
+  const sheet = workbook.addWorksheet('Посещаемость')
 
-  const firstDateCol = 2
+  const numCol = 1
+  const nameCol = 2
+  const firstDateCol = 3
   const lastDateCol = firstDateCol + columns.length - 1
   const totalCol = lastDateCol + 1
   const firstDataRow = 2
   const lastDataRow = firstDataRow + rows.length - 1
   const totalRow = lastDataRow + 1
 
+  // Узкие колонки дат — иначе вертикальная надпись теряет смысл.
   sheet.columns = [
+    { width: 5 },
     { width: 26 },
-    ...columns.map(() => ({ width: 11 })),
-    { width: 9 },
+    ...columns.map(() => ({ width: 4 })),
+    { width: 8 },
   ]
 
-  // Header: Name | dates... | Total
+  // Шапка: № | ФИО | даты... | Итого
   const header = sheet.getRow(1)
-  header.getCell(1).value = 'ФИО'
+  header.getCell(numCol).value = '№'
+  header.getCell(nameCol).value = 'ФИО'
   columns.forEach((column, index) => {
     const cell = header.getCell(firstDateCol + index)
-    // Parsed as UTC midnight on purpose: ExcelJS serializes dates via UTC, so
-    // local midnight would land on the previous day for any positive offset.
+    // Разбор в UTC намеренно: ExcelJS переводит даты через UTC, и локальная
+    // полночь при положительном смещении уехала бы на день назад.
     const date = new Date(`${column.date}T00:00:00Z`)
     if (Number.isNaN(date.getTime())) {
       cell.value = column.date
@@ -70,71 +74,61 @@ export async function buildWorkbook(state) {
       cell.value = date
       cell.numFmt = 'dd.mm.yyyy'
     }
+    // 90 — снизу вверх, как в таблице на странице.
+    cell.alignment = { textRotation: 90, horizontal: 'center', vertical: 'bottom' }
   })
   header.getCell(totalCol).value = 'Итого'
-  header.height = 20
-  header.eachCell((cell) => {
-    cell.font = { bold: true }
-    cell.fill = fill(HEADER_FILL)
-    cell.alignment = { horizontal: 'center', vertical: 'middle' }
-    cell.border = thinBorder
-  })
-  header.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' }
+  header.height = 72
 
-  // One row per person: checked cells become 1, unchecked stay empty.
+  // По строке на человека: отмеченная ячейка — буква, неотмеченная пустая.
   rows.forEach((row, index) => {
     const excelRow = sheet.getRow(firstDataRow + index)
-    excelRow.getCell(1).value = row.name
+    excelRow.getCell(numCol).value = index + 1
+    excelRow.getCell(nameCol).value = row.name
     columns.forEach((column, columnIndex) => {
       const cell = excelRow.getCell(firstDateCol + columnIndex)
-      if (row.checks[column.id]) cell.value = 1
-    })
-
-    if (columns.length) {
-      excelRow.getCell(totalCol).value = {
-        formula: `SUM(${columnLetter(firstDateCol)}${excelRow.number}:${columnLetter(lastDateCol)}${excelRow.number})`,
-      }
-    } else {
-      excelRow.getCell(totalCol).value = 0
-    }
-
-    excelRow.eachCell({ includeEmpty: true }, (cell) => {
+      if (row.checks[column.id]) cell.value = MARK
       cell.alignment = { horizontal: 'center' }
-      cell.border = thinBorder
     })
-    excelRow.getCell(1).alignment = { horizontal: 'left' }
-    const total = excelRow.getCell(totalCol)
-    total.font = { bold: true }
-    total.fill = fill(TOTAL_FILL)
+
+    excelRow.getCell(totalCol).value = columns.length
+      ? {
+          formula: `COUNTIF(${columnLetter(firstDateCol)}${excelRow.number}:${columnLetter(lastDateCol)}${excelRow.number},"${MARK}")`,
+        }
+      : 0
+    excelRow.getCell(numCol).alignment = { horizontal: 'center' }
   })
 
-  // Footer: per-date totals, then the grand total in the corner.
+  // Нижняя строка: итоги по датам и общий итог в углу.
   const footer = sheet.getRow(totalRow)
-  footer.getCell(1).value = 'Итого'
+  footer.getCell(nameCol).value = 'Итого'
   columns.forEach((_, index) => {
     const letter = columnLetter(firstDateCol + index)
-    footer.getCell(firstDateCol + index).value = rows.length
-      ? { formula: `SUM(${letter}${firstDataRow}:${letter}${lastDataRow})` }
+    const cell = footer.getCell(firstDateCol + index)
+    cell.value = rows.length
+      ? { formula: `COUNTIF(${letter}${firstDataRow}:${letter}${lastDataRow},"${MARK}")` }
       : 0
+    cell.alignment = { horizontal: 'center' }
   })
+  // Итоги по строкам — уже числа, поэтому общий итог считается обычной суммой.
   const totalLetter = columnLetter(totalCol)
   footer.getCell(totalCol).value = rows.length
     ? { formula: `SUM(${totalLetter}${firstDataRow}:${totalLetter}${lastDataRow})` }
     : 0
 
-  footer.eachCell({ includeEmpty: true }, (cell) => {
-    cell.font = { bold: true }
-    cell.fill = fill(TOTAL_FILL)
-    cell.alignment = { horizontal: 'center' }
-    cell.border = thinBorder
-  })
-  footer.getCell(1).alignment = { horizontal: 'left' }
-  footer.getCell(totalCol).fill = fill(GRAND_FILL)
+  // Шрифт задаётся поячеечно: у ExcelJS нет надёжного способа сменить
+  // шрифт книги целиком.
+  for (let rowNumber = 1; rowNumber <= totalRow; rowNumber++) {
+    const sheetRow = sheet.getRow(rowNumber)
+    for (let colNumber = 1; colNumber <= totalCol; colNumber++) {
+      sheetRow.getCell(colNumber).font = FONT
+    }
+  }
 
   return workbook
 }
 
-/** Builds the .xlsx and hands it to the browser as a download. */
+/** Собирает .xlsx и отдаёт браузеру на скачивание. */
 export async function exportToExcel(state, filename) {
   const workbook = await buildWorkbook(state)
   const buffer = await workbook.xlsx.writeBuffer()

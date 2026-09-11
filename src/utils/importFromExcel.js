@@ -11,7 +11,7 @@ import { parseDottedDate } from './date.js'
 // Note: 'x' (Latin) and 'х' (Cyrillic kha) are different characters that look
 // identical. A sheet filled in on a Russian keyboard will contain the latter.
 const TRUTHY_MARKS = new Set([
-  'x', 'х', '✓', '✔', 'v', 'в', 'y', 'yes', 'true', '1', '+', 'да', 'д', 'отм',
+  'x', 'х', '✓', '✔', 'v', 'в', 'y', 'yes', 'true', '1', '+', 'да', 'д', 'н', 'отм',
 ])
 
 const EXCEL_EPOCH_UTC = Date.UTC(1899, 11, 30)
@@ -64,6 +64,11 @@ function isChecked(value) {
   return TRUTHY_MARKS.has(text.toLowerCase()) || TRUTHY_MARKS.has(text)
 }
 
+const NUMBER_LABELS = ['№', '№ п/п', '№п/п', 'n', '#', 'номер', 'nn']
+
+/** Колонка нумерации перед ФИО — её нужно пропустить, а не принять за дату. */
+const isNumberLabel = (text) => NUMBER_LABELS.includes(text.toLowerCase())
+
 const isTotalLabel = (text) => ['total', 'totals', 'sum', 'итого', 'сумма'].includes(text.toLowerCase())
 
 /**
@@ -89,6 +94,9 @@ export async function importFromExcel(file) {
   const headerRow = sheet.getRow(1)
   let lastColumn = sheet.columnCount
 
+  // Своя же выгрузка начинается с колонки «№»; у чужих файлов её может не быть.
+  const nameColumn = isNumberLabel(cellText(headerRow.getCell(1).value)) ? 2 : 1
+
   // Drop our own trailing "Total" column so it does not import as a date.
   if (lastColumn > 1 && isTotalLabel(cellText(headerRow.getCell(lastColumn).value))) {
     lastColumn -= 1
@@ -96,7 +104,7 @@ export async function importFromExcel(file) {
 
   const columnIndexes = []
   const columns = []
-  for (let index = 2; index <= lastColumn; index++) {
+  for (let index = nameColumn + 1; index <= lastColumn; index++) {
     columnIndexes.push(index)
     columns.push({ date: cellToISODate(headerRow.getCell(index).value) })
   }
@@ -104,7 +112,7 @@ export async function importFromExcel(file) {
   const rows = []
   for (let rowNumber = 2; rowNumber <= sheet.rowCount; rowNumber++) {
     const sheetRow = sheet.getRow(rowNumber)
-    const name = cellText(sheetRow.getCell(1).value)
+    const name = cellText(sheetRow.getCell(nameColumn).value)
     const checks = columnIndexes.map((index) => isChecked(sheetRow.getCell(index).value))
 
     // Skip rows that are entirely blank.

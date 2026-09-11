@@ -1,5 +1,5 @@
 import { computed, reactive, watch } from 'vue'
-import { toISODate } from '../utils/date.js'
+import { monthWorkdays, toISODate } from '../utils/date.js'
 
 const STORAGE_KEY = 'attendance-sheet'
 const STORAGE_VERSION = 1
@@ -58,6 +58,36 @@ function suggestNextDate() {
   return toISODate(date)
 }
 
+/** Хронологический порядок; колонки без даты уходят в конец. */
+function sortColumnsByDate() {
+  state.columns.sort((a, b) => {
+    if (!a.date) return b.date ? 1 : 0
+    if (!b.date) return -1
+    return a.date.localeCompare(b.date)
+  })
+}
+
+/**
+ * Добавляет недостающие рабочие дни месяца.
+ *
+ * Ничего не удаляет: уже существующие колонки и отметки остаются на месте,
+ * поэтому кнопку можно нажимать повторно без потери данных.
+ *
+ * @returns {number} сколько колонок реально добавлено
+ */
+function fillMonth(reference = new Date()) {
+  const existing = new Set(state.columns.map((column) => column.date))
+  let added = 0
+  for (const date of monthWorkdays(reference)) {
+    if (existing.has(date)) continue
+    existing.add(date)
+    addColumn(date)
+    added += 1
+  }
+  sortColumnsByDate()
+  return added
+}
+
 /**
  * Swaps in a whole sheet, e.g. from an imported file.
  * Incoming `checks` are positional (one per column), so fresh ids are minted here.
@@ -76,6 +106,23 @@ function replaceAll({ columns, rows }) {
 function clearAll() {
   state.columns = []
   state.rows = []
+}
+
+/** Строка отмечена целиком. Пустая таблица без дат — не «целиком». */
+const isRowFull = (row) =>
+  state.columns.length > 0 && state.columns.every((column) => row.checks[column.id])
+
+/**
+ * «Отметить всё» по строке: отмечает все ячейки, а если строка уже
+ * отмечена целиком — снимает отметки.
+ */
+function toggleRow(rowId) {
+  const row = state.rows.find((item) => item.id === rowId)
+  if (!row || !state.columns.length) return
+  const value = !isRowFull(row)
+  for (const column of state.columns) {
+    row.checks[column.id] = value
+  }
 }
 
 const rowTotal = (row) =>
@@ -195,6 +242,9 @@ export function useSheet() {
     removeRow,
     replaceAll,
     clearAll,
+    fillMonth,
+    toggleRow,
+    isRowFull,
     rowTotal,
     columnTotals,
     grandTotal,

@@ -4,9 +4,9 @@ import SheetTable from './components/SheetTable.vue'
 import { useSheet } from './composables/useSheet.js'
 import { exportToExcel } from './utils/exportToExcel.js'
 import { importFromExcel } from './utils/importFromExcel.js'
-import { plural } from './utils/date.js'
+import { monthLabel, plural } from './utils/date.js'
 
-const { state, replaceAll, clearAll } = useSheet()
+const { state, replaceAll, clearAll, fillMonth } = useSheet()
 
 const fileInput = ref(null)
 const busy = ref('')
@@ -14,6 +14,17 @@ const error = ref('')
 const notice = ref('')
 
 const hasData = computed(() => state.rows.length > 0 || state.columns.length > 0)
+const currentMonth = monthLabel()
+
+function handleFillMonth() {
+  error.value = ''
+  const added = fillMonth()
+  const month = currentMonth.toLowerCase()
+  notice.value = added
+    ? `Добавлено ${added} ${plural(added, 'рабочий день', 'рабочих дня', 'рабочих дней')} ` +
+      `за ${month}. Выходные пропущены.`
+    : `Все рабочие дни за ${month} уже в таблице.`
+}
 const canExport = computed(() => state.rows.length > 0 && state.columns.length > 0)
 
 async function handleExport() {
@@ -88,6 +99,14 @@ function handleClear() {
           accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           @change="handleImport"
         />
+        <button
+          class="ghost"
+          :disabled="!!busy"
+          :title="`Добавить все рабочие дни: ${currentMonth}`"
+          @click="handleFillMonth"
+        >
+          Заполнить месяц
+        </button>
         <button class="ghost" :disabled="!!busy" @click="pickFile">
           {{ busy === 'import' ? 'Импорт…' : 'Импорт из Excel' }}
         </button>
@@ -165,7 +184,7 @@ header p {
 }
 
 .primary:hover:not(:disabled) {
-  background: #1d4ed8;
+  background: var(--accent-strong);
 }
 
 .ghost {
@@ -200,8 +219,8 @@ header p {
 }
 
 .notice {
-  background: #dcfce7;
-  color: #166534;
+  background: #eef2ff;
+  color: #3730a3;
 }
 
 .footnote {
